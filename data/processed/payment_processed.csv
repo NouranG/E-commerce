@@ -1,0 +1,6 @@
+payment_type,payment_key
+credit_card,1
+boleto,2
+voucher,3
+debit_card,4
+not_defined,5
