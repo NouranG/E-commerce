@@ -437,4 +437,86 @@ order by trend_pct desc;
         trend_df=run_query(trend_query)
         st.dataframe(trend_df)
 
+# Seasonality of products
+        st.subheader("seasonality of products")
+        season_query="""
+WITH monthly_revenue AS (
+    SELECT d.year,
+           d.month,
+           f.product_key,                          -- ← add
+           SUM(f.net_amount) AS revenue
+    FROM fact f
+    JOIN date d ON f.date_key = d.date_key
+    GROUP BY d.year, d.month, f.product_key        -- ← add
+),
+avg_rev AS (
+    SELECT year,
+           month,
+           product_key,                            -- ← add
+           revenue,
+           AVG(revenue) OVER (
+               PARTITION BY product_key, month     -- ← partition by product+month
+           ) AS avg_month_revenue
+    FROM monthly_revenue
+)
+SELECT p.product_name,                             -- ← name instead of id
+       a.year,
+       a.month,
+       a.revenue,
+       ROUND(a.avg_month_revenue, 2)  AS avg_month_revenue,
+       ROUND(a.revenue - a.avg_month_revenue, 2)   AS deviation,
+       CASE
+           WHEN a.revenue > a.avg_month_revenue THEN 'Peak Season'
+           WHEN a.revenue < a.avg_month_revenue THEN 'Low Season'
+           ELSE 'Normal'
+       END AS seasonal_flag
+FROM avg_rev a
+JOIN products p ON a.product_key = p.product_key  -- ← join for name
+ORDER BY p.product_name, a.month, a.year;
+"""
+        season_df=run_query(season_query)
+        season_df=season_df[['product_name','seasonal_flag']]
+        st.dataframe(season_df)
+
+        st.subheader("Profit Consistency")
+        consist_query="""
+with monthly_profit as (select d.year,d.month,sum(f.profit_amount) as monthly_profit
+from fact f join date d
+on f.date_key = d.date_key
+group by d.year, d.month
+)
+select year,month,monthly_profit,
+avg(monthly_profit) over(partition by year) as avg_profit,
+stddev(monthly_profit) over(partition by year) as profit_volatility
+from monthly_profit
+order by year, month;
+"""     
+        consist_df=run_query(consist_query)
+        st.line_chart(consist_df)
+
+# Identify products experiencing sustained decline across consecutive periods
+        st.subheader("Products experiencing sustained decline")
+        decline_query="""
+with product_monthly_revenue as (select p.product_name,d.year,d.month,
+sum(f.net_amount) as monthly_revenue
+from fact f join products p
+on f.product_key = p.product_key
+join date d
+on f.date_key = d.date_key
+group by p.product_name, d.year, d.month
+)
+, revenue_trend as (select product_name,year,month,monthly_revenue,
+lag(monthly_revenue,1) over(partition by product_name order by year,month) as prev_rev,
+lag(monthly_revenue,2) over(partition by product_name order by year,month) as prev2_rev
+from product_monthly_revenue
+)
+select product_name,year,month,monthly_revenue,prev_rev,prev2_rev
+from revenue_trend
+where monthly_revenue < prev_rev
+and prev_rev < prev2_rev;
+"""
+        decline_df=run_query(decline_query)
+        st.dataframe(decline_df)
+
+
 
