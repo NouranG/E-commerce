@@ -69,12 +69,14 @@ ranked_recs AS (
 )
 SELECT 
     p.product_name AS base_product_name,
-    GROUP_CONCAT(CONCAT(r.recommended_product, ' (', r.reason, ':', ROUND(r.recommendation_score,2), ')') 
-                 ORDER BY r.recommendation_score DESC 
-                 SEPARATOR ', ') AS top_4_recommended
+    GROUP_CONCAT(
+        CONCAT(p2.product_name, ' (', r.reason, ': ', ROUND(r.recommendation_score, 2), ')')  -- ← p2.product_name instead of r.recommended_product
+        ORDER BY r.recommendation_score DESC 
+        SEPARATOR ', '
+    ) AS top_4_recommended
 FROM ranked_recs r
-JOIN products p
-  ON r.base_product = p.product_key
+JOIN products p  ON r.base_product       = p.product_key
+JOIN products p2 ON r.recommended_product = p2.product_key   -- ← add this join
 WHERE r.rnk <= 4
 GROUP BY p.product_name
 ORDER BY p.product_name;
